@@ -263,6 +263,7 @@ SET(SQL_SOURCE
   ../sql-common/pack.c
   ../sql-common/client_authentication.cc
   ../sql-common/sql_string.cc 
+  ../sql-common/parse_configure.cc
   command_service.cc
   conn_handler/channel_info.cc
   conn_handler/connection_handler_per_thread.cc

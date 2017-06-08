@@ -115,6 +115,7 @@ SET(INNOBASE_SOURCES
 	row/row0upd.cc
 	row/row0quiesce.cc
 	row/row0vers.cc
+    ../../sql-common/parse_configure.cc
 	srv/srv0conc.cc
 	srv/srv0mon.cc
 	srv/srv0srv.cc
@@ -154,10 +155,11 @@ IF(HAVE_LIBNUMA)
    SET(NUMA_LIBRARY "numa")
 ENDIF()
 
+SET(LIBEDPCRYPT ${CMAKE_SOURCE_DIR}/libedpcrypt/libedpcrypt.so)
 MYSQL_ADD_PLUGIN(innobase ${INNOBASE_SOURCES} STORAGE_ENGINE
   MANDATORY
   MODULE_OUTPUT_NAME ha_innodb
-  LINK_LIBRARIES ${ZLIB_LIBRARY} ${LZ4_LIBRARY} ${NUMA_LIBRARY})
+  LINK_LIBRARIES ${ZLIB_LIBRARY} ${LZ4_LIBRARY} ${NUMA_LIBRARY} ${LIBEDPCRYPT})
 
 # Remove -DMYSQL_SERVER, it breaks embedded build
 SET_TARGET_PROPERTIES(innobase PROPERTIES COMPILE_DEFINITIONS "")

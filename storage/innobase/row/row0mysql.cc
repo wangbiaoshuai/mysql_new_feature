@@ -71,6 +71,11 @@ Created 9/17/2000 Heikki Tuuri
 #include <deque>
 #include <vector>
 
+#ifdef EDP_CRYPT
+#include "parse_configure.h"
+#include "edp_crypt.h"
+#endif
+
 const char* MODIFICATIONS_NOT_ALLOWED_MSG_FORCE_RECOVERY =
 	"innodb_force_recovery is on. We do not allow database modifications"
 	" by the user. Shut down mysqld and edit my.cnf to set"
@@ -1645,6 +1650,65 @@ INSERT graph.
 @param[in]	mysql_rec	row in the MySQL format
 @param[in,out]	prebuilt	prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
+#ifdef EDP_CRYPT
+static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple)
+{
+    if(table == NULL || tuple == NULL)
+        return;
+
+    const ulint n = dtuple_get_n_fields(tuple);
+    dfield_t* field = tuple->fields;
+    const char* x = table->col_names;
+
+    if(n <= 3 || field == NULL || x == NULL)
+        return;
+
+    ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
+
+    for (ulint i = 0; i < n - 3; i++, field++)
+    {
+        //get col name
+        char col[255];
+        memset(col, 0, sizeof(char) * 255);
+        strcpy(col, x);
+        int offset = strlen(col) + 1;
+        x += offset;
+
+        void* data = dfield_get_data(field);
+        const ulint len = dfield_get_len(field);
+        
+        if(data == NULL)
+            continue;
+
+        if (dfield_is_null(field))
+        {
+            return;        
+        }
+        else if (dfield_is_ext(field))
+        {
+            ulint local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
+            ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
+
+            //encode data
+            if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
+            {
+                Encode(data, local_len, data, ENCRYPT_PWD, 0);
+            }
+        }
+        else
+        {
+            //encode data of col
+            if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
+            {
+                Encode(data, len, data, ENCRYPT_PWD, 0);
+            }
+        }
+        /*std::string tmp((char*)data, len);
+        DBUG_PRINT("row_insert_encode_tuple", ("table: %s; col: %s; encode data: %s", table->name.m_name, col, tmp.c_str()));*/
+    }
+}
+#endif
+
 static
 dberr_t
 row_insert_for_mysql_using_ins_graph(
@@ -1725,6 +1789,11 @@ row_insert_for_mysql_using_ins_graph(
 	}
 
 	que_thr_move_to_run_state_for_mysql(thr, trx);
+
+#ifdef EDP_CRYPT
+    //insert encode data
+    row_insert_encode_tuple(table, node->row);
+#endif
 
 run_again:
 	thr->run_node = node;
@@ -2383,6 +2452,65 @@ row_del_upd_for_mysql_using_cursor(
 @param[in]	mysql_rec	row in the MySQL format
 @param[in,out]	prebuilt	prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
+#ifdef EDP_CRYPT
+static void row_update_encode_field(dict_table_t* table, upd_field_t& field)
+{
+    if(table == NULL)
+        return;
+
+    if(field.field_no <= 3)
+        return;
+
+    ulint col_no = field.field_no - 3;
+    const char* cols = table->col_names;
+
+    if(cols == NULL)
+        return;
+
+    char col[255];
+    ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
+
+    for(ulint i = 0; i <= col_no; i++)
+    {
+        memset(col, 0, sizeof(char) * 255);
+        strcpy(col, cols);
+        ulint offset = strlen(col) + 1;
+        cols += offset;
+    }
+    //DBUG_PRINT("row_update_encode_field", ("col: %s", col));
+
+    void* data = dfield_get_data(&(field.new_val));
+    const ulint len = dfield_get_len(&(field.new_val));
+
+    if(data == NULL)
+        return;
+
+    if (dfield_is_null(&(field.new_val)))
+    {
+        return;
+    }
+    else if (dfield_is_ext(&(field.new_val)))
+    {
+        ulint local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
+        ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
+
+        if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
+        {
+            Encode(data, local_len, data, ENCRYPT_PWD, 0);
+        }
+    }
+    else
+    {
+        if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
+        {
+            Encode(data, len, data, ENCRYPT_PWD, 0);
+        }
+    }
+    /*std::string tmp((char*)data, len);
+    DBUG_PRINT("row_update_encode_field", ("table: %s; col: %s; encode data: %s", table->name.m_name, col, tmp.c_str()));*/
+}
+#endif
+
 static
 dberr_t
 row_update_for_mysql_using_upd_graph(
@@ -2511,6 +2639,18 @@ row_update_for_mysql_using_upd_graph(
 	que_thr_move_to_run_state_for_mysql(thr, trx);
 
 	thr->fk_cascade_depth = 0;
+
+#ifdef EDP_CRYPT
+    if(node != NULL && node->update != NULL)
+    {
+        for(unsigned long n = 0; n < upd_get_n_fields(node->update); n++)
+        {
+            row_update_encode_field(node->table, node->update->fields[n]);
+
+            //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("node->update->fields->new_val: %s, field_no: %u", rec_printer(&(node->update->fields[n].new_val), 1).str().c_str(), node->update->fields[n].field_no));
+        }
+    }
+#endif
 
 run_again:
 	if (thr->fk_cascade_depth == 1 && trx->dict_operation_lock_mode == 0) {
