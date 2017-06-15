@@ -20866,6 +20866,16 @@ ha_innobase::idx_cond_push(
 	DBUG_RETURN(NULL);
 }
 
+#ifdef EDP_CRYPT
+ulong ha_innobase::get_encrypt_key() 
+{
+    if(m_user_thd)
+        return get_crypt_key(m_user_thd);
+    else
+        return 0;
+}
+#endif
+
 /******************************************************************//**
 Use this when the args are passed to the format string from
 errmsg-utf8.txt directly as is.

@@ -49,6 +49,9 @@ struct MPVIO_EXT : public MYSQL_PLUGIN_VIO
 {
   MYSQL_SERVER_AUTH_INFO auth_info;
   const ACL_USER *acl_user;
+#ifdef EDP_CRYPT
+  ulong encrypt_key;
+#endif
   plugin_ref plugin;        ///< what plugin we're under
   LEX_STRING db;            ///< db name from the handshake packet
   /** when restarting a plugin this caches the last client reply */

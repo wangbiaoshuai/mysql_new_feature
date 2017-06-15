@@ -839,6 +839,14 @@ int thd_sql_command(const THD *thd)
   return (int) thd->lex->sql_command;
 }
 
+#ifdef EDP_CRYPT
+extern "C"
+ulong get_crypt_key(const THD *thd)
+{
+    return thd->variables.encrypt_key;
+}
+#endif
+
 extern "C"
 int thd_tx_isolation(const THD *thd)
 {

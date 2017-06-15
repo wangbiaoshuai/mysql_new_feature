@@ -506,6 +506,11 @@ protected:
 
         /** If mysql has locked with external_lock() */
         bool                    m_mysql_has_locked;
+
+#ifdef EDP_CRYPT
+public:
+    ulong get_encrypt_key(); 
+#endif
 };
 
 

@@ -49,6 +49,10 @@
 #include "sql_time.h"
 #include <mutex_lock.h>
 
+#ifdef EDP_CRYPT
+#include "m_string.h"
+#endif
+
 /****************************************************************************
    AUTHENTICATION CODE
    including initial connect handshake, invoking appropriate plugins,
@@ -1360,6 +1364,28 @@ char *get_41_lenc_string(char **buffer,
 }
 #endif /* EMBEDDED LIBRARY */
 
+#ifdef EDP_CRYPT
+void parse_encrypt_passwd(const char* user, unsigned long& encrypt_key)
+{
+    if(user == NULL)
+        return;
+
+    std::string tmp(user);
+    std::string encrypt_passwd;
+
+    std::size_t pos = tmp.rfind("#");
+    if(pos == std::string::npos || pos == tmp.length() - 1)
+        return;
+
+    encrypt_passwd = tmp.substr(pos + 1);
+    encrypt_key = strtoul(encrypt_passwd.c_str(), NULL, 10);
+
+    tmp = tmp.substr(0, pos);
+    strcpy((char*)user, tmp.c_str());
+
+    return;
+}
+#endif
 
 /* the packet format is described in send_client_reply_packet() */
 static size_t parse_client_handshake_packet(MPVIO_EXT *mpvio,
@@ -1570,6 +1596,13 @@ skip_to_ssl:
   char *user= get_string(&end, &bytes_remaining_in_packet, &user_len);
   if (user == NULL)
     return packet_error;
+
+#ifdef EDP_CRYPT 
+  unsigned long encrypt_key = 0UL;
+  parse_encrypt_passwd(user, encrypt_key);
+  //DBUG_PRINT("parse_client_handshake_packet", ("user: %s, encrypt_key: %lu", user, encrypt_key));
+  mpvio->encrypt_key = encrypt_key;
+#endif
 
   /*
     Old clients send a null-terminated string as password; new clients send
@@ -2235,6 +2268,12 @@ acl_authenticate(THD *thd, enum_server_command command)
   }
 
   server_mpvio_update_thd(thd, &mpvio);
+
+#ifdef EDP_CRYPT
+  thd->variables.encrypt_key = mpvio.encrypt_key;
+  //DBUG_PRINT("acl_authenticate", ("encrypt_key: %lu", thd->variables.encrypt_key));
+#endif
+
 #ifdef HAVE_PSI_THREAD_INTERFACE
   PSI_THREAD_CALL(set_connection_type)(thd->get_vio_type());
 #endif /* HAVE_PSI_THREAD_INTERFACE */

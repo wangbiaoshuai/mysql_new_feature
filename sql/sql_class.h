@@ -495,6 +495,10 @@ typedef struct system_variables
   uint max_user_connections;
   ulong my_aes_mode;
 
+#ifdef EDP_CRYPT
+  ulong encrypt_key;
+#endif
+
   /**
     In slave thread we need to know in behalf of which
     thread the query is being run to replicate temp tables properly
