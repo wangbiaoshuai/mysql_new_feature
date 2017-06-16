@@ -592,6 +592,7 @@ ADD_SUBDIRECTORY(mysys_ssl)
 ADD_SUBDIRECTORY(libmysql)
 ADD_SUBDIRECTORY(libbinlogevents)
 ADD_SUBDIRECTORY(libbinlogstandalone)
+ADD_SUBDIRECTORY(libedpcrypt)
 
 IF(WITH_UNIT_TESTS)
   # Visual Studio 11 needs this extra flag in order to compile gmock.
