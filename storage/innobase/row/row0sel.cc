@@ -3265,63 +3265,67 @@ static int row_sel_decode(
         const dict_table_t* table, 
         const rec_t* rec, 
         const ulint* offsets, 
+        const ulint& rec_no,
+        const ulint& col_no,
         const ulong& encrypt_key)
 {
     if(NULL == table || NULL == rec || NULL == offsets)
         return -1;
 
-	const ulint n = rec_offs_n_fields(offsets);
+    const ulint n = rec_offs_n_fields(offsets);
     const char* x = table->col_names;
 
-    if(n <= 3 || NULL == x || encrypt_key != ENCRYPT_PWD)
+    ulint start = 3 - (table->n_cols - n);
+
+    if(n <= start || NULL == x || encrypt_key != ENCRYPT_PWD)
         return -1;
 
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
-	ut_ad(rec_offs_validate(rec, NULL, offsets));
+    ut_ad(rec_offs_validate(rec, NULL, offsets));
 
-	for (ulint i = 3; i < n; i++) 
+    char col[255];
+    for (ulint i = 0; i < col_no; i++)
     {
-        char col[255];
         memset(col, 0, sizeof(char) * 255);
         strcpy(col, x);
         int offset = strlen(col) + 1;
         x += offset;
+    }
 
-		byte* data;
-		ulint len;
+    byte* data;
+    ulint len;
 
-		data = rec_get_nth_field((rec_t*)rec, offsets, i, &len);
+    data = rec_get_nth_field((rec_t*)rec, offsets, rec_no, &len);
 
-		if (len == UNIV_SQL_NULL) 
+    if (len == UNIV_SQL_NULL) 
+    {
+        return -1;
+    }
+
+    if (rec_offs_nth_extern(offsets, rec_no)) 
+    {
+        ulint	local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
+        ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
+
+        //decode data
+        if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
         {
-			continue;
-		}
-
-		if (rec_offs_nth_extern(offsets, i)) 
-        {
-			ulint	local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
-			ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
- 
-            //decode data
-            if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
-            {
-                Decode(data, local_len, data, encrypt_key, 0);
-            }
-
-            //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, local_len: %lu", col, (char*)data, local_len));
-		} 
-        else 
-        {
-            //decode data of col
-            if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
-            {
-                Decode(data, len, data, encrypt_key, 0);
-            }
-
-            //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, len: %lu", col, (char*)data, len));
+            Decode(data, local_len, data, encrypt_key, 0);
         }
-	}
+
+        //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, local_len: %lu", col, (char*)data, local_len));
+    } 
+    else 
+    {
+        //decode data of col
+        if(ParseConfigure::GetInstance().IsEncrypt(table->name.m_name, col))
+        {
+            Decode(data, len, data, encrypt_key, 0);
+        }
+
+        //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, len: %lu", col, (char*)data, len));
+    }
     return 0;
 }
 #endif
@@ -3351,11 +3355,6 @@ row_sel_store_mysql_rec(
     {
         encrypt_key = prebuilt->m_mysql_handler->get_encrypt_key();
     }
-    if(rec)
-    {
-        is_decode = row_sel_decode(cur_table, rec, offsets, encrypt_key);
-        //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
-    }
 #endif
 
 	ut_ad(rec_clust || index == prebuilt->index);
@@ -3378,6 +3377,14 @@ row_sel_store_mysql_rec(
 
 	for (i = 0; i < prebuilt->n_template; i++) {
 		const mysql_row_templ_t*templ = &prebuilt->mysql_template[i];
+
+#ifdef EDP_CRYPT
+        if(rec)
+        {
+            is_decode = row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, i + 1, encrypt_key);
+            //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+        }
+#endif
 
 		if (templ->is_virtual && dict_index_is_clust(index)) {
 
@@ -3474,16 +3481,15 @@ row_sel_store_mysql_rec(
 
 			DBUG_RETURN(FALSE);
 		}
-	}
 
 #ifdef EDP_CRYPT
-    if(rec && 0 == is_decode)
-    {
-        row_sel_decode(cur_table, rec, offsets, encrypt_key);
-        //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
-    }
+        if(rec && 0 == is_decode)
+        {
+            row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, i+1, encrypt_key);
+            //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+        }
 #endif
-
+	}
 
 	/* FIXME: We only need to read the doc_id if an FTS indexed
 	column is being updated.
