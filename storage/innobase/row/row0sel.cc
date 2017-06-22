@@ -3382,7 +3382,7 @@ row_sel_store_mysql_rec(
         if(rec)
         {
             is_decode = row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, i + 1, encrypt_key);
-            //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+            //DBUG_PRINT("row_sel_store_mysql_rec", ("cur_table: %s, vrow:%s, rec_field_no:%lu, i:%lu", cur_table->name.m_name, rec_printer(rec, offsets).str().c_str(), templ->rec_field_no, i));
         }
 #endif
 

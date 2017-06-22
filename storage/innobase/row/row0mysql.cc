@@ -1660,12 +1660,14 @@ static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple)
     dfield_t* field = tuple->fields;
     const char* x = table->col_names;
 
-    if(n <= 3 || field == NULL || x == NULL)
+    const ulint end = 3 - (table->n_cols - n);
+
+    if(n <= end || field == NULL || x == NULL)
         return;
 
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
-    for (ulint i = 0; i < n - 3; i++, field++)
+    for (ulint i = 0; i < n - end; i++, field++)
     {
         //get col name
         char col[255];
@@ -1704,7 +1706,7 @@ static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple)
             }
         }
         /*std::string tmp((char*)data, len);
-        DBUG_PRINT("row_insert_encode_tuple", ("table: %s; col: %s; encode data: %s", table->name.m_name, col, tmp.c_str()));*/
+        DBUG_PRINT("row_insert_encode_tuple", ("table: %s; col: %s; encode data: %s; n_cols:%u, fields:%lu", table->name.m_name, col, tmp.c_str(), table->n_cols, n));*/
     }
 }
 #endif
@@ -1792,6 +1794,7 @@ row_insert_for_mysql_using_ins_graph(
 
 #ifdef EDP_CRYPT
     //insert encode data
+    //DBUG_PRINT("row_insert_for_mysql_using_ins_graph", ("dtuple: %s", rec_printer(node->row).str().c_str()));
     row_insert_encode_tuple(table, node->row);
 #endif
 
@@ -2453,7 +2456,7 @@ row_del_upd_for_mysql_using_cursor(
 @param[in,out]	prebuilt	prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
 #ifdef EDP_CRYPT
-static void row_update_encode_field(dict_table_t* table, upd_field_t& field)
+static void row_update_encode_field(const dict_table_t* table, const upd_field_t& field)
 {
     if(table == NULL)
         return;
@@ -2470,7 +2473,7 @@ static void row_update_encode_field(dict_table_t* table, upd_field_t& field)
     char col[255];
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
-    for(ulint i = 0; i <= col_no; i++)
+    for(ulint i = 0; i < col_no; i++)
     {
         memset(col, 0, sizeof(char) * 255);
         strcpy(col, cols);
