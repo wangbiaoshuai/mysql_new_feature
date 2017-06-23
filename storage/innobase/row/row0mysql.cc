@@ -1651,23 +1651,21 @@ INSERT graph.
 @param[in,out]	prebuilt	prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
 #ifdef EDP_CRYPT
-static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple)
+static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple, const unsigned& col_num)
 {
     if(table == NULL || tuple == NULL)
         return;
 
-    const ulint n = dtuple_get_n_fields(tuple);
+    //const ulint n = dtuple_get_n_fields(tuple);
     dfield_t* field = tuple->fields;
     const char* x = table->col_names;
 
-    const ulint end = 3 - (table->n_cols - n);
-
-    if(n <= end || field == NULL || x == NULL)
+    if(col_num == 0 || field == NULL || x == NULL)
         return;
 
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
-    for (ulint i = 0; i < n - end; i++, field++)
+    for (ulint i = 0; i < col_num; i++, field++)
     {
         //get col name
         char col[255];
@@ -1706,7 +1704,7 @@ static void row_insert_encode_tuple(dict_table_t* table, dtuple_t* tuple)
             }
         }
         /*std::string tmp((char*)data, len);
-        DBUG_PRINT("row_insert_encode_tuple", ("table: %s; col: %s; encode data: %s; n_cols:%u, fields:%lu", table->name.m_name, col, tmp.c_str(), table->n_cols, n));*/
+        DBUG_PRINT("row_insert_encode_tuple", ("table: %s; col: %s; encode data: %s; n_cols:%u, fields:%u", table->name.m_name, col, tmp.c_str(), table->n_cols, col_num));*/
     }
 }
 #endif
@@ -1795,7 +1793,7 @@ row_insert_for_mysql_using_ins_graph(
 #ifdef EDP_CRYPT
     //insert encode data
     //DBUG_PRINT("row_insert_for_mysql_using_ins_graph", ("dtuple: %s", rec_printer(node->row).str().c_str()));
-    row_insert_encode_tuple(table, node->row);
+    row_insert_encode_tuple(table, node->row, prebuilt->n_template);
 #endif
 
 run_again:
@@ -2456,15 +2454,11 @@ row_del_upd_for_mysql_using_cursor(
 @param[in,out]	prebuilt	prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
 #ifdef EDP_CRYPT
-static void row_update_encode_field(const dict_table_t* table, const upd_field_t& field)
+static void row_update_encode_field(const dict_table_t* table, const upd_field_t& field, const unsigned& col_no)
 {
     if(table == NULL)
         return;
 
-    if(field.field_no <= 3)
-        return;
-
-    ulint col_no = field.field_no - 3;
     const char* cols = table->col_names;
 
     if(cols == NULL)
@@ -2473,7 +2467,7 @@ static void row_update_encode_field(const dict_table_t* table, const upd_field_t
     char col[255];
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
-    for(ulint i = 0; i < col_no; i++)
+    for(ulint i = 0; i <= col_no; i++)
     {
         memset(col, 0, sizeof(char) * 255);
         strcpy(col, cols);
@@ -2648,8 +2642,18 @@ row_update_for_mysql_using_upd_graph(
     {
         for(unsigned long n = 0; n < upd_get_n_fields(node->update); n++)
         {
-            row_update_encode_field(node->table, node->update->fields[n]);
-
+            ulint col_no;
+            for (unsigned i = 0; i < prebuilt->n_template; i++) 
+            {
+                const mysql_row_templ_t* templ = &prebuilt->mysql_template[i];
+                if(node->update->fields[n].field_no == templ->rec_field_no)
+                {
+                    col_no = templ->col_no;
+                    //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("field_no:%lu, col_no:%lu", templ->rec_field_no, col_no));
+                    break;
+                }
+            }
+            row_update_encode_field(node->table, node->update->fields[n], col_no);
             //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("node->update->fields->new_val: %s, field_no: %u", rec_printer(&(node->update->fields[n].new_val), 1).str().c_str(), node->update->fields[n].field_no));
         }
     }

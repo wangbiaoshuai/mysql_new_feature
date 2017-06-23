@@ -3272,12 +3272,10 @@ static int row_sel_decode(
     if(NULL == table || NULL == rec || NULL == offsets)
         return -1;
 
-    const ulint n = rec_offs_n_fields(offsets);
+    //const ulint n = rec_offs_n_fields(offsets);
     const char* x = table->col_names;
 
-    ulint start = 3 - (table->n_cols - n);
-
-    if(n <= start || NULL == x || encrypt_key != ENCRYPT_PWD)
+    if(NULL == x || encrypt_key != ENCRYPT_PWD)
         return -1;
 
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
@@ -3285,7 +3283,7 @@ static int row_sel_decode(
     ut_ad(rec_offs_validate(rec, NULL, offsets));
 
     char col[255];
-    for (ulint i = 0; i < col_no; i++)
+    for (ulint i = 0; i <= col_no; i++)
     {
         memset(col, 0, sizeof(char) * 255);
         strcpy(col, x);
@@ -3298,7 +3296,7 @@ static int row_sel_decode(
 
     data = rec_get_nth_field((rec_t*)rec, offsets, rec_no, &len);
 
-    if (len == UNIV_SQL_NULL) 
+    if (len == UNIV_SQL_NULL || strlen(col) == 0) 
     {
         return -1;
     }
@@ -3381,7 +3379,7 @@ row_sel_store_mysql_rec(
 #ifdef EDP_CRYPT
         if(rec)
         {
-            is_decode = row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, i + 1, encrypt_key);
+            is_decode = row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, templ->col_no, encrypt_key);
             //DBUG_PRINT("row_sel_store_mysql_rec", ("cur_table: %s, vrow:%s, rec_field_no:%lu, i:%lu", cur_table->name.m_name, rec_printer(rec, offsets).str().c_str(), templ->rec_field_no, i));
         }
 #endif
@@ -3485,7 +3483,7 @@ row_sel_store_mysql_rec(
 #ifdef EDP_CRYPT
         if(rec && 0 == is_decode)
         {
-            row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, i+1, encrypt_key);
+            row_sel_decode(cur_table, rec, offsets, templ->rec_field_no, templ->col_no, encrypt_key);
             //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
         }
 #endif
