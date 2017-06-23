@@ -3264,41 +3264,45 @@ be needed in the query.
 static int row_sel_decode(
         const dict_table_t* table, 
         const rec_t* rec, 
-        const ulint* offsets, 
+        const ulint* offsets,
+        const mysql_row_templ_t* templ,
         const ulong& encrypt_key)
 {
     if(NULL == table || NULL == rec || NULL == offsets)
         return -1;
 
-	const ulint n = rec_offs_n_fields(offsets);
+	//const ulint n = rec_offs_n_fields(offsets);
+    const ulint n = templ->col_no;
     const char* x = table->col_names;
 
-    if(n <= 3 || NULL == x || encrypt_key != ENCRYPT_PWD)
+    if(NULL == x || encrypt_key != ENCRYPT_PWD)
         return -1;
 
     ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
 
 	ut_ad(rec_offs_validate(rec, NULL, offsets));
 
-	for (ulint i = 3; i < n; i++) 
+    char col[255];
+	for (ulint i = 0; i <= n; i++) 
     {
-        char col[255];
         memset(col, 0, sizeof(char) * 255);
         strcpy(col, x);
         int offset = strlen(col) + 1;
         x += offset;
+    }
 
 		byte* data;
 		ulint len;
 
-		data = rec_get_nth_field((rec_t*)rec, offsets, i, &len);
+		data = rec_get_nth_field((rec_t*)rec, offsets, templ->rec_field_no, &len);
 
 		if (len == UNIV_SQL_NULL) 
         {
-			continue;
+			//continue;
+            return -1;
 		}
 
-		if (rec_offs_nth_extern(offsets, i)) 
+		if (rec_offs_nth_extern(offsets, templ->rec_field_no)) 
         {
 			ulint	local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
 			ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
@@ -3309,7 +3313,7 @@ static int row_sel_decode(
                 Decode(data, local_len, data, encrypt_key, 0);
             }
 
-            //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, local_len: %lu", col, (char*)data, local_len));
+            DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, local_len: %lu", col, (char*)data, local_len));
 		} 
         else 
         {
@@ -3319,9 +3323,9 @@ static int row_sel_decode(
                 Decode(data, len, data, encrypt_key, 0);
             }
 
-            //DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, len: %lu", col, (char*)data, len));
+            DBUG_PRINT("row_sel_encode", ("col: %s, data: %s, len: %lu", col, (char*)data, len));
         }
-	}
+	//}
     return 0;
 }
 #endif
@@ -3351,10 +3355,15 @@ row_sel_store_mysql_rec(
     {
         encrypt_key = prebuilt->m_mysql_handler->get_encrypt_key();
     }
-    if(rec)
+    
+    for (i = 0; i < prebuilt->n_template; i++)
     {
-        is_decode = row_sel_decode(cur_table, rec, offsets, encrypt_key);
-        //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+        const mysql_row_templ_t*templ = &prebuilt->mysql_template[i];
+        if(rec)
+        {
+            is_decode = row_sel_decode(cur_table, rec, offsets, templ, encrypt_key);
+            DBUG_PRINT("row_sel_store_mysql_rec", ("table:%s, vrow: %s", cur_table->name.m_name, rec_printer(rec, offsets).str().c_str()));
+        }
     }
 #endif
 
@@ -3479,8 +3488,15 @@ row_sel_store_mysql_rec(
 #ifdef EDP_CRYPT
     if(rec && 0 == is_decode)
     {
-        row_sel_decode(cur_table, rec, offsets, encrypt_key);
-        //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+        for (i = 0; i < prebuilt->n_template; i++)
+        {
+            const mysql_row_templ_t*templ = &prebuilt->mysql_template[i];
+            is_decode = row_sel_decode(cur_table, rec, offsets, templ, encrypt_key);
+            DBUG_PRINT("row_sel_store_mysql_rec", ("decode vrow: %s", rec_printer(rec, offsets).str().c_str()));
+
+            //row_sel_decode(cur_table, rec, offsets, encrypt_key);
+            //DBUG_PRINT("row_sel_store_mysql_rec", ("vrow: %s", rec_printer(rec, offsets).str().c_str()));
+        }
     }
 #endif
 
