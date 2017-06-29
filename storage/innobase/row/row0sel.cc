@@ -4139,7 +4139,7 @@ row_sel_try_search_shortcut_for_mysql(
 				    : 0,
 				   mtr);
 	rec = btr_pcur_get_rec(pcur);
-
+    
 	if (!page_rec_is_user_rec(rec)) {
 
 		return(SEL_RETRY);
@@ -4668,6 +4668,103 @@ It also has optimization such as pre-caching the rows, using AHI, etc.
 				pcur with stored position! In opening of a
 				cursor 'direction' should be 0.
 @return DB_SUCCESS or error code */
+#ifdef EDP_CRYPT
+void decode_index_rec(const dict_index_t* index, const rec_t* rec, const ulint* offsets, const ulint& encrypt_key)
+{
+    //ulint info = rec_get_info_bits(rec, rec_offs_comp(offsets));
+	
+    //const ulint	comp	= rec_offs_comp(offsets);
+//	const ulint	n	= rec_offs_n_fields(offsets);
+
+//	ut_ad(rec_offs_validate(rec, NULL, offsets));
+
+	//o << (comp ? "COMPACT RECORD" : "RECORD")
+	//  << "(info_bits=" << info << ", " << n << " fields): {";
+
+    ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
+
+	for (ulint i = 0; i < index->n_fields; i++) {
+		byte*	data;
+		ulint		len;
+
+        const char* col = (const char*)(index->fields[i].name);
+
+		data = rec_get_nth_field((rec_t*)rec, offsets, i, &len);
+
+		if (len == UNIV_SQL_NULL) {
+			continue;
+		}
+
+		if (rec_offs_nth_extern(offsets, i)) {
+			ulint	local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
+			ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
+
+            if(ParseConfigure::GetInstance().IsEncrypt(index->table_name, col))
+            {
+                Decode(data, local_len, data, encrypt_key, 0);
+            }
+		} else {
+            if(ParseConfigure::GetInstance().IsEncrypt(index->table_name, col))
+            {
+                Decode(data, len, data, encrypt_key, 0);
+            }
+		}
+        std::string tmp((char*)data);
+        DBUG_PRINT("decode_index_rec", ("data: %s, encrypt_key: %lu", tmp.c_str(), encrypt_key));
+	}
+
+    return;
+}
+
+void decode_dtuple_index(const dtuple_t* tuple, const dict_index_t* index, const ulint& encrypt_key)
+{
+    if(tuple == NULL || index == NULL)
+        return;
+
+    const ulint n = dtuple_get_n_fields(tuple);
+    dfield_t* field = tuple->fields;
+
+    const char* col_name = (const char*)(index->fields[tuple->info_bits].name);
+
+    ParseConfigure::GetInstance().Init("/etc/encrypt.ini");
+
+    for (ulint i = 0; i < n; i++, field++)
+    {
+        void* data = dfield_get_data(field);
+        const ulint len = dfield_get_len(field);
+        
+        if(data == NULL)
+            continue;
+
+        if (dfield_is_null(field))
+        {
+            return;        
+        }
+        else if (dfield_is_ext(field))
+        {
+            ulint local_len = len - BTR_EXTERN_FIELD_REF_SIZE;
+            ut_ad(len >= BTR_EXTERN_FIELD_REF_SIZE);
+
+            //encode data
+            if(ParseConfigure::GetInstance().IsEncrypt(index->table_name, col_name))
+            {
+                Encode(data, local_len, data, encrypt_key, 0);
+            }
+        }
+        else
+        {
+            //encode data of col
+            if(ParseConfigure::GetInstance().IsEncrypt(index->table_name, col_name))
+            {
+                Encode(data, len, data, encrypt_key, 0);
+            }
+        }
+        std::string tmp((char*)data, len);
+        DBUG_PRINT("decode_dtuple_inde", ("table: %s; col: %s; encode data: %s", index->table_name, col_name, tmp.c_str()));
+    }
+}
+#endif
+    
 dberr_t
 row_search_mvcc(
 	byte*		buf,
@@ -4758,6 +4855,17 @@ row_search_mvcc(
 	bool    need_vrow = dict_index_has_virtual(prebuilt->index)
 		&& (prebuilt->read_just_key
 		    || prebuilt->m_read_virtual_key);
+
+#ifdef EDP_CRYPT
+    ulong encrypt_key = 0;
+    if(prebuilt && prebuilt->m_mysql_handler)
+    {
+        encrypt_key = prebuilt->m_mysql_handler->get_encrypt_key();
+    }
+
+    //dict_table_t* cur_table = prebuilt->table;
+    //DBUG_PRINT("row_search_mvcc", ("cur_table:%s, n_template:%u, search_tuple:%s", cur_table->name.m_name, prebuilt->n_template, rec_printer(search_tuple).str().c_str()));
+#endif
 
 	/*-------------------------------------------------------------*/
 	/* PHASE 0: Release a possible s-latch we are holding on the
@@ -4909,6 +5017,15 @@ row_search_mvcc(
 	search system latch when we retrieve an externally stored field, we
 	cannot use the adaptive hash index in a search in the case the row
 	may be long and there may be externally stored fields */
+
+#ifdef EDP_CRYPT
+    //DBUG_PRINT("phase2 row_search_mvcc", ("tmp: %s, unique_search:%lu, index_name: %s, heap_len: %lu, heap: %s", tmp, unique_search, (const char*)(index->name), index->heap->len, (char*)(index->heap->buf_block)));
+
+    //if(unique_search == 0)
+    //{
+        decode_dtuple_index(search_tuple, index, encrypt_key);
+    //}
+#endif
 
 	if (UNIV_UNLIKELY(direction == 0)
 	    && unique_search
@@ -5442,7 +5559,7 @@ wrong_offs:
 		in prebuilt: if not, then we return with DB_RECORD_NOT_FOUND */
 
 		/* fputs("Comparing rec and search tuple\n", stderr); */
-
+ 
 		if (0 != cmp_dtuple_rec(search_tuple, rec, offsets)) {
 
 			if (set_also_gap_locks
