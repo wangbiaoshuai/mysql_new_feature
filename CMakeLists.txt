@@ -13,6 +13,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
+ADD_DEFINITIONS(-DEDP_CRYPT)
+
 IF(WIN32)
   # CMake 2.8.12 is needed for Visual Studio 2013
   CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)

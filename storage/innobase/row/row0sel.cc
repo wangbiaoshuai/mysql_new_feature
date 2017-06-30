@@ -4760,7 +4760,7 @@ void decode_dtuple_index(const dtuple_t* tuple, const dict_index_t* index, const
             }
         }
         std::string tmp((char*)data, len);
-        DBUG_PRINT("decode_dtuple_inde", ("table: %s; col: %s; encode data: %s", index->table_name, col_name, tmp.c_str()));
+        DBUG_PRINT("decode_dtuple_index", ("table: %s; col: %s; encode data: %s", index->table_name, col_name, tmp.c_str()));
     }
 }
 #endif
