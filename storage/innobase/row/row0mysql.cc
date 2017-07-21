@@ -74,6 +74,8 @@ Created 9/17/2000 Heikki Tuuri
 #ifdef EDP_CRYPT
 #include "parse_configure.h"
 #include "edp_crypt.h"
+#include "handler.h"
+#include "ha_innodb.h"
 #endif
 
 const char* MODIFICATIONS_NOT_ALLOWED_MSG_FORCE_RECOVERY =
@@ -1793,7 +1795,15 @@ row_insert_for_mysql_using_ins_graph(
 #ifdef EDP_CRYPT
     //insert encode data
     //DBUG_PRINT("row_insert_for_mysql_using_ins_graph", ("dtuple: %s", rec_printer(node->row).str().c_str()));
-    row_insert_encode_tuple(table, node->row, prebuilt->n_template);
+    ulong encrypt_key = 0;
+    if(prebuilt && prebuilt->m_mysql_handler)
+    {
+        encrypt_key = prebuilt->m_mysql_handler->get_encrypt_key();
+    }
+    if(encrypt_key == ENCRYPT_PWD)
+    {
+        row_insert_encode_tuple(table, node->row, prebuilt->n_template);
+    }
 #endif
 
 run_again:
@@ -2638,23 +2648,31 @@ row_update_for_mysql_using_upd_graph(
 	thr->fk_cascade_depth = 0;
 
 #ifdef EDP_CRYPT
-    if(node != NULL && node->update != NULL)
+    ulong encrypt_key = 0;
+    if(prebuilt && prebuilt->m_mysql_handler)
     {
-        for(unsigned long n = 0; n < upd_get_n_fields(node->update); n++)
+        encrypt_key = prebuilt->m_mysql_handler->get_encrypt_key();
+    }
+    if(encrypt_key == ENCRYPT_PWD)
+    {
+        if(node != NULL && node->update != NULL)
         {
-            ulint col_no;
-            for (unsigned i = 0; i < prebuilt->n_template; i++) 
+            for(unsigned long n = 0; n < upd_get_n_fields(node->update); n++)
             {
-                const mysql_row_templ_t* templ = &prebuilt->mysql_template[i];
-                if(node->update->fields[n].field_no == templ->rec_field_no)
+                ulint col_no;
+                for (unsigned i = 0; i < prebuilt->n_template; i++) 
                 {
-                    col_no = templ->col_no;
-                    //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("field_no:%lu, col_no:%lu", templ->rec_field_no, col_no));
-                    break;
+                    const mysql_row_templ_t* templ = &prebuilt->mysql_template[i];
+                    if(node->update->fields[n].field_no == templ->rec_field_no)
+                    {
+                        col_no = templ->col_no;
+                        //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("field_no:%lu, col_no:%lu", templ->rec_field_no, col_no));
+                        break;
+                    }
                 }
+                row_update_encode_field(node->table, node->update->fields[n], col_no);
+                //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("node->update->fields->new_val: %s, field_no: %u", rec_printer(&(node->update->fields[n].new_val), 1).str().c_str(), node->update->fields[n].field_no));
             }
-            row_update_encode_field(node->table, node->update->fields[n], col_no);
-            //DBUG_PRINT("row_update_for_mysql_using_upd_graph", ("node->update->fields->new_val: %s, field_no: %u", rec_printer(&(node->update->fields[n].new_val), 1).str().c_str(), node->update->fields[n].field_no));
         }
     }
 #endif
