@@ -51,6 +51,9 @@
 
 #ifdef EDP_CRYPT
 #include "m_string.h"
+#ifdef RSA_CRYPT
+#include "rsa_encrypt.h"
+#endif 
 #endif
 
 /****************************************************************************
@@ -1378,6 +1381,13 @@ void parse_encrypt_passwd(const char* user, unsigned long& encrypt_key)
         return;
 
     encrypt_passwd = tmp.substr(pos + 1);
+#ifdef RSA_CRYPT
+    std::pair<const char*, const char*> key_pair;
+    key_pair.first = RSA_PUB_KEY;
+    key_pair.second = RSA_PRI_KEY;
+    RsaEncrypt rsa_encrypt(key_pair);
+    encrypt_passwd = rsa_encrypt.RsaDecode((const unsigned char*)encrypt_passwd.c_str(), encrypt_passwd.length());
+#endif
     encrypt_key = strtoul(encrypt_passwd.c_str(), NULL, 10);
 
     tmp = tmp.substr(0, pos);

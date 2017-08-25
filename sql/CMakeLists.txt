@@ -13,7 +13,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
-
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/include 
   ${CMAKE_SOURCE_DIR}/sql/conn_handler
@@ -57,7 +56,7 @@ ADD_CUSTOM_COMMAND(
   DEPENDS gen_lex_token
 )
 
-ADD_DEFINITIONS(-DMYSQL_SERVER -DHAVE_REPLICATION)
+ADD_DEFINITIONS(-DMYSQL_SERVER -DHAVE_REPLICATION -DRSA_CRYPT)
 IF(SSL_DEFINES)
  ADD_DEFINITIONS(${SSL_DEFINES})
 ENDIF()
@@ -382,10 +381,11 @@ ADD_DEPENDENCIES(sql GenDigestServerSource)
 ADD_DEPENDENCIES(sql GenBootstrapPriv)
 ADD_DEPENDENCIES(sql GenSysSchema)
 DTRACE_INSTRUMENT(sql)
+SET(LIBRSA_ENCRYPT ${CMAKE_SOURCE_DIR}/libedpcrypt/librsa_encrypt.a)
 TARGET_LINK_LIBRARIES(sql ${MYSQLD_STATIC_PLUGIN_LIBS} 
   mysys mysys_ssl dbug strings vio regex binlogevents_static
   ${LIBWRAP} ${LIBCRYPT} ${LIBDL}
-  ${SSL_LIBRARIES})
+  ${SSL_LIBRARIES} ${LIBRSA_ENCRYPT} ssl crypto)
 
 #
 # On Windows platform we compile in the clinet-side Windows Native Authentication
