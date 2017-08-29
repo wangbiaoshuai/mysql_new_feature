@@ -66,6 +66,7 @@ SET(SQL_SHARED_SOURCES
   abstract_query_plan.cc
   auth/sql_authentication.cc
   auth/sql_auth_cache.cc
+  auth/base64.cc
   auth/sql_authorization.cc
   auth/sql_user_table.cc
   auth/sql_user.cc

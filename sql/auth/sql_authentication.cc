@@ -51,6 +51,7 @@
 
 #ifdef EDP_CRYPT
 #include "m_string.h"
+#include "base64.h"
 #endif
 
 /****************************************************************************
@@ -1378,7 +1379,8 @@ void parse_encrypt_passwd(const char* user, unsigned long& encrypt_key)
         return;
 
     encrypt_passwd = tmp.substr(pos + 1);
-    encrypt_key = strtoul(encrypt_passwd.c_str(), NULL, 10);
+    std::string decode_data = base64_decode(encrypt_passwd);
+    encrypt_key = strtoul(decode_data.c_str(), NULL, 10);
 
     tmp = tmp.substr(0, pos);
     strcpy((char*)user, tmp.c_str());
